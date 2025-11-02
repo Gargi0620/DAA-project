@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Employee Shift Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        .drop-zone {
+            border: 2px dashed #3B82F6;
+            border-radius: 0.5rem;
+            transition: all 0.3s ease;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #2563EB;
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3B82F6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .shift-morning { background-color: rgba(254, 240, 138, 0.3); }
+        .shift-evening { background-color: rgba(147, 197, 253, 0.3); }
+        .shift-night { background-color: rgba(167, 139, 250, 0.3); }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+<div class="container mx-auto px-4 py-8 max-w-5xl">
+    <header class="mb-8 text-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2">Employee Shift Management System</h1>
+        <p class="text-gray-600">Upload employee data, generate and optimize shift schedules</p>
+    </header>
+
+    <!-- Upload Section -->
+    <section id="upload-section" class="mb-8">
+        <div id="drop-zone" class="drop-zone py-12 px-4 flex flex-col items-center justify-center cursor-pointer">
+            <i class="fas fa-cloud-upload-alt text-4xl text-blue-500 mb-3"></i>
+            <h3 class="text-xl font-semibold mb-2">Upload Employee CSV</h3>
+            <p class="text-gray-500 text-sm mb-4 text-center">Drag & drop your CSV file or click to browse</p>
+            <p class="text-gray-400 text-xs text-center">File must contain 'Name' and 'Gender' columns</p>
+            <input type="file" id="file-input" class="hidden" accept=".csv">
+        </div>
+        <div id="file-info" class="mt-3 text-center hidden">
+            <span id="file-name" class="text-gray-600"></span>
+            <button id="remove-file" class="ml-2 text-red-500"><i class="fas fa-times"></i></button>
+        </div>
+    </section>
+
+    <!-- Employee Preview -->
+    <section id="employee-preview-section" class="mb-8 hidden fade-in">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">Employee Data Preview</h2>
+        <div class="overflow-x-auto bg-white rounded-lg shadow">
+            <table id="employee-table" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
+                </tr>
+                </thead>
+                <tbody id="employee-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+        </div>
+
+        <div class="mt-6 flex flex-wrap gap-4 items-center justify-center">
+            <select id="algorithm-select" class="border border-gray-300 rounded-md py-2 px-3 focus:ring-2 focus:ring-blue-500">
+                <option value="greedy">Greedy Algorithm</option>
+                <option value="backtracking">Backtracking Optimization</option>
+                <option value="hybrid">Hybrid Algorithm</option>
+            </select>
+            <button id="generate-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-2 px-6 rounded-md transition-colors">
+                <i class="fas fa-layer-group mr-2"></i> Generate Schedule
+            </button>
+        </div>
+    </section>
+
+    <!-- Loading -->
+    <section id="loading-section" class="hidden text-center py-12 fade-in">
+        <div class="loading-spinner mx-auto mb-4"></div>
+        <p id="loading-text" class="text-gray-600">Processing shifts...</p>
+    </section>
+
+    <!-- Results -->
+    <section id="results-section" class="mb-8 hidden fade-in">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-gray-800" id="results-title">Shift Schedule</h2>
+            <span id="algorithm-badge" class="px-3 py-1 text-xs font-medium rounded-full"></span>
+        </div>
+        <div class="overflow-x-auto bg-white rounded-lg shadow">
+            <table id="schedule-table" class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gender</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Shift</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                </tr>
+                </thead>
+                <tbody id="schedule-table-body" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+        </div>
+
+        <div class="mt-6 flex justify-center">
+            <button id="download-btn" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-md transition-colors">
+                <i class="fas fa-file-pdf mr-2"></i> Download Schedule as PDF
+            </button>
+        </div>
+    </section>
+
+    <section id="error-section" class="hidden fade-in">
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded" role="alert">
+            <p class="font-bold">Error</p>
+            <p id="error-message">An error occurred while processing your request.</p>
+        </div>
+    </section>
+
+    <div id="reset-container" class="text-center mt-8 hidden">
+        <button id="reset-btn" class="text-blue-600 hover:text-blue-800 font-medium">
+            <i class="fas fa-redo mr-1"></i> Start Over
+        </button>
+    </div>
+
+    <footer class="mt-12 text-center text-gray-500 text-sm">
+        <p>&copy; 2025 Employee Shift Management System</p>
+    </footer>
+</div>
+
+<!-- SCRIPT -->
+<script>
+    let employeeData = [];
+    let scheduleData = [];
+    let currentAlgorithm = '';
+
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+    const removeFileBtn = document.getElementById('remove-file');
+    const employeePreviewSection = document.getElementById('employee-preview-section');
+    const employeeTableBody = document.getElementById('employee-table-body');
+    const generateBtn = document.getElementById('generate-btn');
+    const algorithmSelect = document.getElementById('algorithm-select');
+    const loadingSection = document.getElementById('loading-section');
+    const loadingText = document.getElementById('loading-text');
+    const resultsSection = document.getElementById('results-section');
+    const algorithmBadge = document.getElementById('algorithm-badge');
+    const scheduleTableBody = document.getElementById('schedule-table-body');
+    const downloadBtn = document.getElementById('download-btn');
+    const errorSection = document.getElementById('error-section');
+    const errorMessage = document.getElementById('error-message');
+    const resetContainer = document.getElementById('reset-container');
+    const resetBtn = document.getElementById('reset-btn');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+    removeFileBtn.addEventListener('click', resetApp);
+
+    function handleFile(file) {
+        if (!file.name.endsWith('.csv')) return showError('Please upload a valid CSV file.');
+        fileName.textContent = file.name; fileInfo.classList.remove('hidden');
+        Papa.parse(file, {
+            header: true, skipEmptyLines: true,
+            complete: results => {
+                if (results.errors.length) return showError(results.errors[0].message);
+                if (!results.meta.fields.includes('Name') || !results.meta.fields.includes('Gender'))
+                    return showError('CSV must contain "Name" and "Gender".');
+                employeeData = results.data;
+                displayEmployeeData();
+                employeePreviewSection.classList.remove('hidden');
+                resetContainer.classList.remove('hidden');
+            },
+            error: err => showError(err.message)
+        });
+    }
+
+    function displayEmployeeData() {
+        employeeTableBody.innerHTML = '';
+        employeeData.forEach(e => {
+            const row = `<tr><td class="px-6 py-4">${e.Name}</td><td class="px-6 py-4">${e.Gender}</td></tr>`;
+            employeeTableBody.insertAdjacentHTML('beforeend', row);
+        });
+    }
+
+    generateBtn.addEventListener('click', () => {
+        const algo = algorithmSelect.value;
+        currentAlgorithm = algo;
+        showLoading(`Running ${algo} algorithm...`);
+        setTimeout(() => {
+            if (algo === 'greedy') scheduleData = greedyAssignment();
+            else if (algo === 'backtracking') scheduleData = backtrackingAssignment();
+            else scheduleData = hybridAssignment();
+            displaySchedule(algo);
+        }, 800);
+    });
+
+    function greedyAssignment() {
+        const shifts = ['Morning (8am-4pm)', 'Evening (4pm-12am)', 'Night (12am-8am)'];
+        return employeeData.map(e => {
+            let shift;
+            if (e.Gender.toLowerCase() === 'female')
+                shift = Math.random() < 0.7 ? shifts[0] : shifts[Math.floor(Math.random() * shifts.length)];
+            else
+                shift = Math.random() < 0.4 ? shifts[2] : shifts[Math.floor(Math.random() * shifts.length)];
+            return { ...e, Shift: shift, Hours: 8 };
+        });
+    }
+
+    function backtrackingAssignment() {
+        const shifts = ['Morning (8am-4pm)', 'Evening (4pm-12am)', 'Night (12am-8am)'];
+        let best = [], minDiff = Infinity;
+
+        const count = sched => shifts.map(s => sched.filter(e => e.Shift === s).length);
+        function backtrack(i, current) {
+            if (i === employeeData.length) {
+                const c = count(current), diff = Math.max(...c) - Math.min(...c);
+                if (diff < minDiff) { minDiff = diff; best = current.map(x => ({ ...x })); }
+                return;
+            }
+            for (const s of shifts) {
+                current.push({ ...employeeData[i], Shift: s, Hours: 8 });
+                backtrack(i + 1, current);
+                current.pop();
+            }
+        }
+        backtrack(0, []);
+        return best.length ? best : greedyAssignment();
+    }
+
+    function hybridAssignment() {
+        let res = greedyAssignment();
+        const counts = {};
+        res.forEach(e => counts[e.Shift] = (counts[e.Shift] || 0) + 1);
+        const avg = employeeData.length / 3;
+        for (let e of res) {
+            if (counts[e.Shift] > avg + 1) {
+                const newShift = Object.keys(counts).reduce((a, b) => counts[a] < counts[b] ? a : b);
+                counts[e.Shift]--; e.Shift = newShift; counts[newShift]++;
+            }
+        }
+        return res;
+    }
+
+    function displaySchedule(algo) {
+        const meta = {
+            greedy: ['Greedy Assignment', 'bg-yellow-100 text-yellow-800'],
+            backtracking: ['Backtracking Optimization', 'bg-green-100 text-green-800'],
+            hybrid: ['Hybrid Optimization', 'bg-purple-100 text-purple-800']
+        };
+        const [title, style] = meta[algo];
+        document.getElementById('results-title').textContent = title;
+        algorithmBadge.className = `px-3 py-1 text-xs font-medium rounded-full ${style}`;
+        algorithmBadge.textContent = title;
+        scheduleTableBody.innerHTML = '';
+        scheduleData.forEach(e => {
+            const sclass = e.Shift.includes('Morning') ? 'shift-morning' :
+                           e.Shift.includes('Evening') ? 'shift-evening' : 'shift-night';
+            const row = `<tr>
+                <td class="px-6 py-4">${e.Name}</td>
+                <td class="px-6 py-4">${e.Gender}</td>
+                <td class="px-6 py-4 ${sclass}">${e.Shift}</td>
+                <td class="px-6 py-4">${e.Hours}</td></tr>`;
+            scheduleTableBody.insertAdjacentHTML('beforeend', row);
+        });
+        hideLoading(); resultsSection.classList.remove('hidden');
+    }
+
+    downloadBtn.addEventListener('click', () => {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`${currentAlgorithm.toUpperCase()} Schedule`, 14, 22);
+        doc.setFontSize(10); doc.text(`Generated on ${new Date().toLocaleString()}`, 14, 30);
+        const rows = scheduleData.map(e => [e.Name, e.Gender, e.Shift, e.Hours]);
+        doc.autoTable({ head: [['Name', 'Gender', 'Shift', 'Hours']], body: rows, startY: 35 });
+        doc.save('shift-schedule.pdf');
+    });
+
+    function showLoading(msg) { loadingText.textContent = msg; loadingSection.classList.remove('hidden'); employeePreviewSection.classList.add('hidden'); resultsSection.classList.add('hidden'); }
+    function hideLoading() { loadingSection.classList.add('hidden'); }
+    function showError(msg) { errorMessage.textContent = msg; errorSection.classList.remove('hidden'); setTimeout(() => errorSection.classList.add('hidden'), 4000); }
+    function resetApp() {
+        employeeData = []; scheduleData = []; currentAlgorithm = '';
+        fileInput.value = ''; fileInfo.classList.add('hidden');
+        employeePreviewSection.classList.add('hidden');
+        resultsSection.classList.add('hidden');
+        resetContainer.classList.add('hidden');
+        employeeTableBody.innerHTML = ''; scheduleTableBody.innerHTML = '';
+    }
+</script>
+</body>
+</html>
